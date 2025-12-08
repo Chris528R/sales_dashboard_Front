@@ -26,17 +26,3 @@ Una carpeta /dist.
 Un archivo index.html minificado.
 
 Un archivo main.js con todo el código de React empaquetado y optimizado por Webpack.
-
-📂 Estructura del Proyecto
-
-/
-├── dist/               # Archivos generados para producción (se crea al hacer build)
-├── public/
-│   └── index.html      # Plantilla HTML base
-├── src/
-│   ├── index.js        # Punto de entrada (Entry point)
-│   ├── App.jsx         # Componente principal
-│   └── components/     # Dashboard, Login, etc.
-├── package.json        # Dependencias y scripts
-├── webpack.config.js   # Configuración de Webpack (Reglas, Loaders, Plugins)
-└── .gitignore          # Archivos ignorados por Git
