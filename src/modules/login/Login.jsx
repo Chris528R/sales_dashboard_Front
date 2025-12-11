@@ -1,38 +1,139 @@
-import { useState } from 'react'
-import Swal from 'sweetalert2'
-import withReactContent from 'sweetalert2-react-content'
+import React from 'react';
+import {Navigate, redirect} from "react-router-dom"
+import Alert from '../common/Alert.jsx';
 
-export default function Login() {
-  const [username, setUsername] = useState('')
-
-  const handleLogin = () => {
-    const MySwal = withReactContent(Swal)
-
-    MySwal.fire({
-      title: <i>Ingresa tu usuario</i>,
-      input: 'text',
-      inputValue: username,
-      preConfirm: () => {
-        const value = Swal.getInput()?.value || ''
-        setUsername(value)
-
-        // Mostrar mensaje de "Usuario aceptado"
-        Swal.fire({
-          icon: 'success',
-          title: 'Usuario aceptado',
-          text: `Bienvenido, ${value}!`,
-        })
-      },
-    })
+class Login extends React.Component {
+  constructor(props){
+    super(props);
+    this.state = {
+      credentials: { user: '', password: '' },
+      alert: { show: false, message: '', type: '' },
+      redirect: false
+    };
   }
 
-  return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Login</h1>
-      <button onClick={handleLogin}>Ingresar</button>
-      <div style={{ marginTop: '20px' }}>
-        Usuario actual: {username || 'No ingresado'}
+  handleInputChange = (event) => {
+    const { name, value } = event.target;
+    this.setState((prevState) => ({
+      credentials: {
+        ...prevState.credentials,
+        [name]: value,
+      },
+    }));
+  }
+
+  handleLogin = (event) => {
+    event.preventDefault();
+    const { user, password } = this.state.credentials;
+
+    const formData = new URLSearchParams();
+    formData.append('nombre', user);
+    formData.append('cont', password);
+
+    fetch('http://localhost:8080/dist/api/login', { // Verifica que '/dist' sea correcto
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded', // CAMBIO IMPORTANTE
+      },
+      body: formData // Enviamos formData en lugar de JSON string
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === 'success') {
+        this.setState({
+          alert: { show: true, message: 'Inicio de sesión exitoso', type: 'success' },
+        });
+        
+      } else {
+        this.setState({
+          alert: { show: true, message: 'Credenciales inválidas', type: 'danger' },
+        });
+      }
+    })
+    .catch((error) => {
+      console.error('Error:', error);
+      this.setState({
+        alert: { show: true, message: 'Error en la conexión', type: 'danger' },
+      });
+    });
+  }
+
+  closeAlert = () => {
+    this.setState((prevState) => ({
+      alert: { ...prevState.alert, show: false }
+    }));
+
+    if (this.state.alert.type === 'success') {
+      this.setState({ redirect: true });
+    }
+  }
+
+
+  render() {
+
+    if (this.state.redirect) {
+      return <Navigate to="/administrator" />;
+    }
+
+    const { alert, credentials } = this.state;
+
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
+
+        <Alert 
+          show={alert.show} 
+          type={alert.type}
+          message={alert.message}
+          onClose={this.closeAlert}
+        />
+
+        <div className="card shadow-lg overflow-hidden" style={{ maxWidth: '900px', width: '100%' }}>
+          <div className="row g-0">
+          
+          {/* Lado izquierdo: Bienvenida (Visible solo en MD o superior) */}
+          <div className="col-md-6 d-none d-md-flex bg-primary text-white flex-column justify-content-center align-items-center p-5">
+            <h1 className="fw-bold display-5">Bienvenido</h1>
+            <h1 className="fw-light display-6">de nuevo</h1>
+          </div>
+
+          {/* Lado derecho: Formulario */}
+          <div className="col-md-6 p-5 bg-white">
+            <h2 className="mb-4 fw-bold text-center text-dark">Iniciar Sesión</h2>
+            <form onSubmit={this.handleLogin}>
+              <div className="mb-3">
+                <input 
+                  type="text" 
+                  name='user'
+                  className="form-control form-control-lg" 
+                  placeholder="Usuario" 
+                  value={credentials.user}
+                  onChange={this.handleInputChange}
+                  required 
+                />
+              </div>
+              <div className="mb-3">
+                <input 
+                  type="password" 
+                  name='password'
+                  className="form-control form-control-lg" 
+                  placeholder="Contraseña" 
+                  value={credentials.password}
+                  onChange={this.handleInputChange}
+                  required 
+                />
+              </div>
+              
+              <button type="submit" className="btn btn-warning w-100 fw-bold py-2">
+                Iniciar Sesión
+              </button>
+            </form>
+          </div>
+
+        </div>
       </div>
     </div>
-  )
-}
+    );
+  }
+};
+
+export default Login;
