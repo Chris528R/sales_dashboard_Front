@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { use } from 'react';
 import {Navigate, redirect} from "react-router-dom"
 import Alert from '../common/Alert.jsx';
 import fondoLogin from '../../images/fondo_login.jpg'
@@ -48,6 +48,7 @@ class Login extends React.Component {
       } else {
         this.setState({
           alert: { show: true, message: 'Credenciales inválidas', type: 'danger' },
+          credentials: { user: '', password: '' }
         });
       }
     })
