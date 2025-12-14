@@ -1,6 +1,7 @@
 import React from 'react';
 import {Navigate, redirect} from "react-router-dom"
 import Alert from '../common/Alert.jsx';
+import fondoLogin from '../../images/fondo_login.jpg'
 
 class Login extends React.Component {
   constructor(props){
@@ -91,7 +92,13 @@ class Login extends React.Component {
           <div className="row g-0">
           
           {/* Lado izquierdo: Bienvenida (Visible solo en MD o superior) */}
-          <div className="col-md-6 d-none d-md-flex bg-primary text-white flex-column justify-content-center align-items-center p-5">
+          <div className="col-md-6 d-none d-md-flex bg-primary text-white flex-column justify-content-center align-items-center p-5"
+          style={{
+            backgroundImage: `url(${fondoLogin})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
+          }}>
             <h1 className="fw-bold display-5">Bienvenido</h1>
             <h1 className="fw-light display-6">de nuevo</h1>
           </div>
