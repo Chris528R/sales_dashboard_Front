@@ -31,10 +31,10 @@ class Login extends React.Component {
     formData.append('nombre', user);
     formData.append('cont', password);
 
-    fetch('http://localhost:8080/dist/api/login', { // Verifica que '/dist' sea correcto
+    fetch('http://localhost:8080/dist/api/login', { 
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded', // CAMBIO IMPORTANTE
+        'Content-Type': 'application/x-www-form-urlencoded', 
       },
       body: formData // Enviamos formData en lugar de JSON string
     })
