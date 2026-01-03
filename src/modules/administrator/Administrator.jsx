@@ -9,28 +9,29 @@ import ProductTable from '../common/ProductTable';
 import SalesTable from '../common/SalesTable';
 import ProductForm from '../common/ProductForm';
 import SalePanel from '../common/SalePanel';
+import SharedModal from '../common/SharedModal';
 
 class Administrator extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      // --- DATOS DEL DASHBOARD (Vienen de /api/dashboard) ---
+      // DATOS DEL DASHBOARD
       dashboardData: {
         ventasHoy: 0,
         productosBajoStock: 0,
         ventasPorCategoria: [],
         topProductos: []
       },
-      // --- DATOS AUXILIARES ---
+      //  DATOS AUXILIARES 
       productList: [], // Para llenar el select de ventas
       salesList: [], // Historial de ventas para la tabla
       mockMonthlyData: [], // Datos para el gráfico de líneas
 
-      // --- FORMULARIOS ---
+      //  FORMULARIOS 
       newProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'pieza' },
       newSale: { productId: '', quantity: 1 },
 
-      // --- ALERTAS ---
+      // ALERTAS 
       alert: { show: false, type: '', message: '' },
 
       // ESTADO PARA VENTA MULTI-PRODUCTO
@@ -38,7 +39,13 @@ class Administrator extends React.Component {
       currentSelection: { productId: '', quantity: 1 }, // Selección temporal
 
       // ESTADO PARA TABLAS
-      showModal: false, // Para ver detalles/editar (opcional por ahora)
+      showModal: false,
+      modalMode: 'VIEW',    // 'VIEW' o 'EDIT'
+      modalEntity: 'PRODUCT', // 'PRODUCT' o 'SALE'
+      selectedItem: {},
+      saleDetails: [],
+
+
 
       // Paginación en las tablas 
       currentPageProd: 1,
@@ -93,7 +100,7 @@ class Administrator extends React.Component {
       .catch(err => console.error("Error cargando historial ventas:", err));
   };
 
-  // --- 1. CARGA DE DATOS (GET) ---
+  // CARGA DE DATOS DEL DASHBOARD
   loadDashboardData = () => {
     fetch('http://localhost:8080/api/dashboard')
       .then(res => res.json())
@@ -128,7 +135,27 @@ class Administrator extends React.Component {
           this.showAlert('error', 'No se pudo eliminar');
         }
       })
-      .catch(err => this.showAlert('error', 'Error de conexión'));
+      .catch(err => this.showAlert('error', 'Error de conexion'));
+  };
+
+  handleDeleteSale = (id) => {
+    if (!window.confirm("¿Seguro que quieres eliminar esta venta?")) return;
+
+    fetch(`http://localhost:8080/api/ventas?id=${id}`, {
+      method: 'DELETE'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          this.showAlert('success', 'Venta eliminada');
+          this.loadProducts(); // Recargar tabla
+          this.loadSalesHistory(); // Recargar historial
+          this.loadDashboardData(); // Actualizar contadores
+        } else {
+          this.showAlert('error', 'No se pudo eliminar');
+        }
+      })
+      .catch(err => this.showAlert('error', 'Error de conexion'));
   };
 
   handleAddCategory = (e) => {
@@ -146,11 +173,11 @@ class Administrator extends React.Component {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
-          this.showAlert('success', 'Categoría agregada correctamente');
+          this.showAlert('success', 'Categoria agregada correctamente');
           this.loadCategories(); // Recargar lista de categorías
           this.setState({ newCategoryName: '' });
         } else {
-          this.showAlert('error', 'Error al agregar la categoría');
+          this.showAlert('error', 'Error al agregar la categoria');
         }
       });
   };
@@ -164,16 +191,16 @@ class Administrator extends React.Component {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
-          this.showAlert('success', 'Categoría eliminada');
+          this.showAlert('success', 'Categoria eliminada');
           this.loadCategories(); // Recargar lista
         } else {
-          this.showAlert('error', 'No se pudo eliminar la categoría');
+          this.showAlert('error', 'No se pudo eliminar la categoria');
         }
       })
-      .catch(err => this.showAlert('error', 'Error de conexión'));
+      .catch(err => this.showAlert('error', 'Error de conexion'));
   };
 
-  // --- 2. MANEJO DE INPUTS ---
+  //  MANEJO DE INPUTS 
   handleProductChange = (e) => {
     const { name, value } = e.target;
     this.setState(prev => ({
@@ -216,7 +243,7 @@ class Administrator extends React.Component {
     formData.append('cantidades', cants);
     formData.append('precios_unitarios', precios);
 
-    fetch('http://localhost:8080/api/ventas', { // Ajusta tu URL
+    fetch('http://localhost:8080/api/ventas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData
@@ -224,24 +251,26 @@ class Administrator extends React.Component {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
-          this.showAlert('success', 'Venta registrada con éxito');
+          this.showAlert('success', 'Venta registrada con exito');
           this.setState({ cart: [] }); // Limpiar carrito
           this.loadDashboardData(); // Recargar gráficas
+          this.loadProducts(); // Recargar lista para ventas
+          this.loadSalesHistory(); // Recargar historial de ventas
         } else {
           this.showAlert('error', 'No se pudo registrar la venta');
         }
       });
   };
 
-  // --- 3. REGISTRAR PRODUCTO (POST) ---
+  // REGISTRAR PRODUCTO
   submitProduct = (e) => {
     e.preventDefault();
     const { nombre, descripcion, precio, stock, categoria, unidad } = this.state.newProduct;
 
     const formData = new URLSearchParams();
     formData.append('nombre', nombre);
-    formData.append('descripcion', descripcion); 
-    formData.append('tipo', 'general'); 
+    formData.append('descripcion', descripcion);
+    formData.append('tipo', 'general');
     formData.append('precio', precio);
     formData.append('stock', stock);
     formData.append('categoria', categoria);
@@ -258,16 +287,15 @@ class Administrator extends React.Component {
           this.showAlert('success', 'Producto registrado correctamente');
           this.loadDashboardData(); // Recargar gráficas
           this.loadProducts(); // Recargar lista para ventas
-          // Limpiar form
           this.setState({ newProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'pieza' } });
         } else {
           this.showAlert('error', 'Error al registrar el producto');
         }
       })
-      .catch(err => this.showAlert('error', 'Error de conexión'));
+      .catch(err => this.showAlert('error', 'Error de conexion'));
   };
 
-  // --- 4. REGISTRAR VENTA (POST COMPLEJO) ---
+  // REGISTRAR VENTA
   submitSale = (e) => {
     e.preventDefault();
     const { productId, quantity } = this.state.newSale;
@@ -276,14 +304,13 @@ class Administrator extends React.Component {
     const selectedProd = this.state.productList.find(p => p.id == productId);
 
     if (!selectedProd) {
-      this.showAlert('error', 'Selecciona un producto válido');
+      this.showAlert('error', 'Selecciona un producto valido');
       return;
     }
 
     const precioUnitario = selectedProd.precio;
     const total = precioUnitario * quantity;
 
-    // Preparar datos para tu API (Strings separados por comas)
     const formData = new URLSearchParams();
     formData.append('total', total);
     formData.append('ids_productos', productId.toString()); // "1"
@@ -300,12 +327,14 @@ class Administrator extends React.Component {
         if (data.status === 'success') {
           this.showAlert('success', `Venta registrada por $${total}`);
           this.loadDashboardData(); // Recargar métricas (Ventas hoy)
+          this.loadProducts(); // Recargar lista para ventas
+          this.loadSalesHistory(); // Recargar historial de ventas
           this.setState({ newSale: { productId: '', quantity: 1 } });
         } else {
           this.showAlert('error', 'Error al registrar la venta');
         }
       })
-      .catch(err => this.showAlert('error', 'Error de conexión'));
+      .catch(err => this.showAlert('error', 'Error de conexion'));
   };
 
   addToCart = () => {
@@ -337,14 +366,171 @@ class Administrator extends React.Component {
     this.setState(prev => ({ alert: { ...prev.alert, show: false } }));
   };
 
+  openModal = (mode, entity, item) => {
+    this.setState({
+      showModal: true,
+      modalMode: mode,
+      modalEntity: entity,
+      selectedItem: { ...item },
+      saleDetails: []
+    });
+
+    if (entity === 'SALE') {
+      this.fetchSaleDetails(item.id);
+    }
+  };
+
+  closeModal = () => {
+    this.setState({ showModal: false, selectedItem: {} });
+  };
+
+  fetchSaleDetails = (saleId) => {
+    fetch(`http://localhost:8080/api/ventas?id=${saleId}`)
+      .then(res => res.json())
+      .then(data => {
+        this.setState({ saleDetails: data });
+      })
+      .catch(err => console.error("Error cargando detalles de venta:", err));
+  };
+
+  handleModalChange = (e) => {
+    const { name, value } = e.target;
+    this.setState(prev => ({
+      selectedItem: { ...prev.selectedItem, [name]: value }
+    }));
+  };
+
+  saveModalChanges = () => {
+    const { modalEntity, selectedItem, saleDetails } = this.state;
+
+    if (modalEntity === 'PRODUCT') {
+      const formData = new URLSearchParams();
+      formData.append('nombre', selectedItem.nombre);
+      formData.append('descripcion', selectedItem.descripcion);
+      formData.append('tipo', selectedItem.tipo || 'General');
+      formData.append('precio', selectedItem.precio);
+      formData.append('stock', selectedItem.stock);
+      formData.append('categoria', selectedItem.id_categoria || 1);
+      formData.append('unidad', selectedItem.unidad || 'Pieza');
+
+      let url = 'http://localhost:8080/api/productos';
+      if (this.state.modalMode === 'EDIT') {
+        url += `?id=${selectedItem.id}`;
+      }
+
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            this.showAlert('success', 'Producto actualizado');
+            this.closeModal();
+            this.loadProducts();
+            this.loadDashboardData();
+          } else {
+            this.showAlert('error', 'Error al actualizar');
+          }
+        });
+    } else if (modalEntity === 'SALE') {
+      if (saleDetails.length === 0) {
+        this.showAlert('error', 'La venta no puede quedar vacía.');
+        return;
+      }
+
+      // Recalcular Total General
+      const totalVenta = saleDetails.reduce((acc, item) => acc + (item.cantidad * (item.precio)), 0);
+
+      const ids = saleDetails.map(item => item.id_producto).join(',');
+      const cants = saleDetails.map(item => item.cantidad).join(',');
+      const precios = saleDetails.map(item => (item.precio)).join(',');
+      const formData = new URLSearchParams();
+      formData.append('total', totalVenta);
+      formData.append('ids_productos', ids);
+      formData.append('cantidades', cants);
+      formData.append('precios_unitarios', precios);
+
+      fetch(`http://localhost:8080/api/ventas?id=${selectedItem.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            this.showAlert('success', 'Venta actualizada correctamente');
+            this.closeModal();
+            this.loadSalesHistory(); // Recargar tabla ventas
+            this.loadDashboardData(); // Recargar gráficas
+            this.loadProducts(); // Recargar inventario (porque el stock cambió)
+          } else {
+            this.showAlert('error', 'Error al actualizar la venta');
+          }
+        })
+        .catch(err => this.showAlert('error', 'Error de conexión'));
+    }
+  };
+
+  handleSaleDetailChange = (index, newQuantity) => {
+    const qty = parseInt(newQuantity);
+    if (qty < 1 || isNaN(qty)) return;
+
+    this.setState(prevState => {
+      const updatedDetails = [...prevState.saleDetails];
+      const item = updatedDetails[index];
+
+      item.cantidad = qty;
+      const precio = item.precio;
+      item.subtotal = qty * precio;
+
+      return { saleDetails: updatedDetails };
+    });
+  };
+
+  handleSaleDetailRemove = (index) => {
+    if (!window.confirm("¿Quitar este producto de la venta?")) return;
+
+    this.setState(prevState => {
+      const updatedDetails = [...prevState.saleDetails];
+      updatedDetails.splice(index, 1);
+      return { saleDetails: updatedDetails };
+    });
+  };
+
+  handleSaleDetailAdd = (productId) => {
+    const product = this.state.productList.find(p => p.id == productId);
+    if (!product) return;
+
+    this.setState(prevState => {
+      const updatedDetails = [...prevState.saleDetails];
+
+      const existingIndex = updatedDetails.findIndex(d => d.id_producto === product.id);
+
+      if (existingIndex >= 0) {
+        updatedDetails[existingIndex].cantidad += 1;
+        updatedDetails[existingIndex].subtotal = updatedDetails[existingIndex].cantidad * product.precio;
+      } else {
+        updatedDetails.push({
+          id_producto: product.id,
+          nombre: product.nombre,
+          cantidad: 1,
+          precio: product.precio,
+          subtotal: product.precio
+        });
+      }
+      return { saleDetails: updatedDetails };
+    });
+  };
+
+
   render() {
     const {
       dashboardData, productList, salesList, // Datos
       newProduct, newSale, alert, cart, currentSelection, mockMonthlyData, // Formularios y UI
       currentPageProd, currentPageSale, itemsPerPage = 5 // Paginación 
     } = this.state;
-
-    // pagination handled inside table components
 
 
     return (
@@ -358,6 +544,22 @@ class Administrator extends React.Component {
           onClose={this.closeAlert}
         />
 
+        {/* COMPONENTE MODAL */}
+        <SharedModal
+          show={this.state.showModal}
+          onClose={this.closeModal}
+          mode={this.state.modalMode}
+          entity={this.state.modalEntity}
+          data={this.state.selectedItem}
+          saleDetails={this.state.saleDetails}
+          productList={this.state.productList}
+          onChange={this.handleModalChange}
+          onSave={this.saveModalChanges}
+          onDetailChange={this.handleSaleDetailChange}
+          onDetailRemove={this.handleSaleDetailRemove}
+          onDetailAdd={this.handleSaleDetailAdd}
+        />
+
         {/* HEADER */}
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div>
@@ -366,7 +568,7 @@ class Administrator extends React.Component {
           </div>
         </div>
 
-        {/* METRICS CARDS (Con Datos Reales) */}
+        {/* METRICS CARDS */}
         <div className="row g-3 mb-4">
           <MetricCard
             title="Ventas de Hoy"
@@ -377,7 +579,7 @@ class Administrator extends React.Component {
 
           <MetricCard
             title="Bajo Stock"
-            value= {dashboardData.productosBajoStock}
+            value={dashboardData.productosBajoStock}
             icon="⚠️"
             color="warning"
           />
@@ -406,7 +608,7 @@ class Administrator extends React.Component {
             </div>
           </div>
 
-          {/* Pie Chart: Ventas por Categoria */}
+          {/* Ventas por Categoria */}
           <div className="col-lg-4">
             <div className="card shadow-sm h-100 border-0">
               <div className="card-body">
@@ -424,7 +626,7 @@ class Administrator extends React.Component {
           </div>
         </div>
 
-        {/* LISTS SECTION (Top Productos) */}
+        {/* Top Productos */}
         <div className="row g-3 mb-4">
           <div className="col-md-12">
             <div className="card shadow-sm border-0">
@@ -442,7 +644,6 @@ class Administrator extends React.Component {
                       <FlexChartSeries
                         binding="cantidad"
                         name="Unidades"
-                        // Personalizar el tooltip para que se vea claro
                         tooltipContent="<b>{seriesName}</b><br/>{item.producto}: {value}"
                       />
 
@@ -471,7 +672,7 @@ class Administrator extends React.Component {
           </div>
         </div>
 
-        {/* --- SECCIÓN DE TABLAS DE GESTIÓN --- */}
+        {/* SECCIÓN DE TABLAS DE GESTIÓN */}
         <div className="row g-4 mb-5">
           <ProductTable
             products={productList}
@@ -479,6 +680,8 @@ class Administrator extends React.Component {
             itemsPerPage={itemsPerPage}
             onDelete={this.handleDeleteProduct}
             onPageChange={(page) => this.setState({ currentPageProd: page })}
+            onView={this.openModal}
+            onEdit={this.openModal}
           />
 
           <SalesTable
@@ -486,10 +689,13 @@ class Administrator extends React.Component {
             currentPage={currentPageSale}
             itemsPerPage={itemsPerPage}
             onPageChange={(page) => this.setState({ currentPageSale: page })}
+            onView={this.openModal}
+            onEdit={this.openModal}
+            onCancel={this.handleDeleteSale}
           />
         </div>
 
-        {/* --- FORMULARIOS DE OPERACIONES --- */}
+        {/* FORMULARIOS DE OPERACIONES */}
         <h4 className="fw-bold mt-5 mb-3">Operaciones Rápidas</h4>
         <div className="row g-3">
 
