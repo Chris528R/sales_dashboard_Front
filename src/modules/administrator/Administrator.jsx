@@ -4,6 +4,11 @@ import '@mescius/wijmo.styles/wijmo.css';
 // Componentes de Wijmo
 import { FlexChart, FlexChartSeries, FlexChartAxis, FlexPie } from '@mescius/wijmo.react.chart';
 import Alert from '../common/Alert';
+import MetricCard from '../common/MetricCard';
+import ProductTable from '../common/ProductTable';
+import SalesTable from '../common/SalesTable';
+import ProductForm from '../common/ProductForm';
+import SalePanel from '../common/SalePanel';
 
 class Administrator extends React.Component {
   constructor(props) {
@@ -34,30 +39,53 @@ class Administrator extends React.Component {
 
       // ESTADO PARA TABLAS
       showModal: false, // Para ver detalles/editar (opcional por ahora)
+
+      // Paginación en las tablas 
+      currentPageProd: 1,
+      currentPageSale: 1,
+      itemsPerPage: 5,
+
+      // Lista de categorías 
+      categoryList: [],
+      newCategoryName: ''
     };
   }
+
+  handleSelectionChange = (changes) => {
+    this.setState(prev => ({ currentSelection: { ...prev.currentSelection, ...changes } }));
+  };
 
   componentDidMount() {
     this.loadDashboardData();
     this.loadProducts();
     this.loadSalesHistory();
     this.loadMonthlyHistory();
+    this.loadCategories();
   }
+
+  loadCategories = () => {
+    fetch('http://localhost:8080/api/categorias')
+      .then(res => res.json())
+      .then(data => {
+        this.setState({ categoryList: data });
+      })
+      .catch(err => console.error("Error cargando categorías:", err));
+  };
 
   loadMonthlyHistory = () => {
     fetch('http://localhost:8080/api/ventas/historial')
       .then(res => res.json())
       .then(data => {
         const formattedData = data.map(item => ({
-            month: item.mes,
-            sales: item.total
+          month: item.mes,
+          sales: item.total
         }));
         this.setState({ mockMonthlyData: formattedData });
       });
   }
 
   loadSalesHistory = () => {
-    fetch('http://localhost:8080/api/ventas') 
+    fetch('http://localhost:8080/api/ventas')
       .then(res => res.json())
       .then(data => {
         this.setState({ salesList: data });
@@ -87,7 +115,6 @@ class Administrator extends React.Component {
   handleDeleteProduct = (id) => {
     if (!window.confirm("¿Seguro que quieres eliminar este producto?")) return;
 
-    // Nota: Usamos fetch con DELETE y query param
     fetch(`http://localhost:8080/api/productos?id=${id}`, {
       method: 'DELETE'
     })
@@ -99,6 +126,48 @@ class Administrator extends React.Component {
           this.loadDashboardData(); // Actualizar contadores
         } else {
           this.showAlert('error', 'No se pudo eliminar');
+        }
+      })
+      .catch(err => this.showAlert('error', 'Error de conexión'));
+  };
+
+  handleAddCategory = (e) => {
+    e.preventDefault();
+    const { newCategoryName } = this.state;
+
+    const formData = new URLSearchParams();
+    formData.append('nombre', newCategoryName);
+
+    fetch('http://localhost:8080/api/categorias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          this.showAlert('success', 'Categoría agregada correctamente');
+          this.loadCategories(); // Recargar lista de categorías
+          this.setState({ newCategoryName: '' });
+        } else {
+          this.showAlert('error', 'Error al agregar la categoría');
+        }
+      });
+  };
+
+  handleDeleteCategory = (id) => {
+    if (!window.confirm("¿Seguro que quieres eliminar esta categoría?")) return;
+
+    fetch(`http://localhost:8080/api/categorias?id=${id}`, {
+      method: 'DELETE'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          this.showAlert('success', 'Categoría eliminada');
+          this.loadCategories(); // Recargar lista
+        } else {
+          this.showAlert('error', 'No se pudo eliminar la categoría');
         }
       })
       .catch(err => this.showAlert('error', 'Error de conexión'));
@@ -117,6 +186,10 @@ class Administrator extends React.Component {
     this.setState(prev => ({
       newSale: { ...prev.newSale, [name]: value }
     }));
+  };
+
+  handleCategoryInputChange = (e) => {
+    this.setState({ newCategoryName: e.target.value });
   };
 
   removeFromCart = (index) => {
@@ -167,8 +240,8 @@ class Administrator extends React.Component {
 
     const formData = new URLSearchParams();
     formData.append('nombre', nombre);
-    formData.append('descripcion', descripcion); // Hardcodeado o agregar input si quieres
-    formData.append('tipo', 'general'); // Valor por defecto
+    formData.append('descripcion', descripcion); 
+    formData.append('tipo', 'general'); 
     formData.append('precio', precio);
     formData.append('stock', stock);
     formData.append('categoria', categoria);
@@ -265,7 +338,14 @@ class Administrator extends React.Component {
   };
 
   render() {
-    const { dashboardData, productList, newProduct, newSale, alert, mockMonthlyData } = this.state;
+    const {
+      dashboardData, productList, salesList, // Datos
+      newProduct, newSale, alert, cart, currentSelection, mockMonthlyData, // Formularios y UI
+      currentPageProd, currentPageSale, itemsPerPage = 5 // Paginación 
+    } = this.state;
+
+    // pagination handled inside table components
+
 
     return (
       <div className="container-fluid bg-light min-vh-100 p-4">
@@ -291,21 +371,19 @@ class Administrator extends React.Component {
           <MetricCard
             title="Ventas de Hoy"
             value={`$${dashboardData.ventasHoy}`}
-            change="Día actual"
             icon="💰"
             color="success"
           />
+
           <MetricCard
-            title="Prod. Bajo Stock"
-            value={dashboardData.productosBajoStock}
-            change="Atención requerida"
+            title="Bajo Stock"
+            value= {dashboardData.productosBajoStock}
             icon="⚠️"
             color="warning"
           />
           <MetricCard
             title="Total Productos"
             value={productList.length}
-            change="En catálogo"
             icon="📦"
             color="primary"
           />
@@ -313,7 +391,6 @@ class Administrator extends React.Component {
 
         {/* CHARTS SECTION */}
         <div className="row g-3 mb-4">
-          {/* Line Chart: Usamos Mock porque el endpoint no devuelve historial mensual aun */}
           <div className="col-lg-8">
             <div className="card shadow-sm h-100 border-0">
               <div className="card-body">
@@ -329,7 +406,7 @@ class Administrator extends React.Component {
             </div>
           </div>
 
-          {/* Pie Chart: Ventas por Categoria (REAL) */}
+          {/* Pie Chart: Ventas por Categoria */}
           <div className="col-lg-4">
             <div className="card shadow-sm h-100 border-0">
               <div className="card-body">
@@ -347,241 +424,119 @@ class Administrator extends React.Component {
           </div>
         </div>
 
-        {/* LISTS SECTION (Top Productos REAL) */}
+        {/* LISTS SECTION (Top Productos) */}
         <div className="row g-3 mb-4">
           <div className="col-md-12">
             <div className="card shadow-sm border-0">
               <div className="card-body">
-                <h5 className="card-title mb-3">Top Productos Vendidos</h5>
-                <div className="list-group list-group-flush">
-                  {dashboardData.topProductos.map((prod, idx) => (
-                    <div key={idx} className="list-group-item d-flex justify-content-between align-items-center border-0 px-0">
-                      <div>
-                        <h6 className="mb-0">{prod.producto}</h6>
-                      </div>
-                      <div className="text-end">
-                        <small className="text-success fw-bold">{prod.cantidad} vendidos</small>
-                      </div>
-                    </div>
-                  ))}
-                  {dashboardData.topProductos.length === 0 && <p className="text-muted small">No hay datos aún.</p>}
+                <h5 className="card-title mb-3">Top 5 Productos Vendidos</h5>
+
+                <div style={{ height: '400px' }}>
+                  {dashboardData.topProductos.length > 0 ? (
+                    <FlexChart
+                      itemsSource={dashboardData.topProductos}
+                      bindingX="producto"
+                      rotated={true}
+                      palette={['#0d6efd', '#6610f2', '#6f42c1']}
+                    >
+                      <FlexChartSeries
+                        binding="cantidad"
+                        name="Unidades"
+                        // Personalizar el tooltip para que se vea claro
+                        tooltipContent="<b>{seriesName}</b><br/>{item.producto}: {value}"
+                      />
+
+                      {/* Eje Y (Nombres de productos) */}
+                      <FlexChartAxis
+                        wjProperty="axisY"
+                        reversed={true}
+                        style={{ fontSize: '12px', fontWeight: 'bold' }}
+                        majorGrid={false}
+                      />
+
+                      {/* Eje X (Cantidades) */}
+                      <FlexChartAxis
+                        wjProperty="axisX"
+                        format="n0"
+                        title="Cantidad Vendida"
+                      />
+                    </FlexChart>
+                  ) : (
+                    <p className="text-muted text-center mt-5">No hay datos de ventas aún.</p>
+                  )}
                 </div>
+
               </div>
             </div>
           </div>
-
         </div>
 
         {/* --- SECCIÓN DE TABLAS DE GESTIÓN --- */}
         <div className="row g-4 mb-5">
+          <ProductTable
+            products={productList}
+            currentPage={currentPageProd}
+            itemsPerPage={itemsPerPage}
+            onDelete={this.handleDeleteProduct}
+            onPageChange={(page) => this.setState({ currentPageProd: page })}
+          />
 
-          {/* TABLA 1: PRODUCTOS (Stock, Nombre, Acción) */}
-          <div className="col-lg-6">
-            <div className="card shadow-sm border-0 h-100">
-              <div className="card-header bg-white fw-bold d-flex justify-content-between">
-                <span>📦 Últimos Productos</span>
-                <small className="text-muted">Mostrando primeros 10</small>
-              </div>
-              <div className="table-responsive">
-                <table className="table table-hover align-middle mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Stock</th>
-                      <th>Nombre</th>
-                      <th className="text-end">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {this.state.productList.slice(0, 10).map((prod) => (
-                      <tr key={prod.id}>
-                        <td>
-                          <span className={`badge ${prod.stock < 5 ? 'bg-danger' : 'bg-success'} bg-opacity-75`}>
-                            {prod.stock}
-                          </span>
-                        </td>
-                        <td className="fw-bold text-dark">{prod.nombre}</td>
-                        <td className="text-end">
-                          <div className="btn-group btn-group-sm">
-                            {/* Botón Ver */}
-                            <button className="btn btn-outline-primary" title="Ver Detalles">
-                              👁️
-                            </button>
-                            {/* Botón Editar */}
-                            <button className="btn btn-outline-warning" title="Modificar">
-                              ✏️
-                            </button>
-                            {/* Botón Eliminar */}
-                            <button
-                              className="btn btn-outline-danger"
-                              title="Eliminar"
-                              onClick={() => this.handleDeleteProduct(prod.id)}
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* TABLA 2: VENTAS (Fecha, Monto, Acción) */}
-          <div className="col-lg-6">
-            <div className="card shadow-sm border-0 h-100">
-              <div className="card-header bg-white fw-bold d-flex justify-content-between">
-                <span>💰 Historial de Ventas</span>
-                <small className="text-muted">Mostrando primeras 10</small>
-              </div>
-              <div className="table-responsive">
-                <table className="table table-hover align-middle mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Monto Total</th>
-                      <th className="text-end">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Asumimos que tienes salesList en tu state cargado desde /api/ventas */}
-                    {(this.state.salesList || []).slice(0, 10).map((sale) => (
-                      <tr key={sale.id}>
-                        <td className="text-muted small">{sale.fecha}</td>
-                        <td className="fw-bold text-success">${sale.total.toFixed(2)}</td>
-                        <td className="text-end">
-                          <div className="btn-group btn-group-sm">
-                            <button className="btn btn-outline-info" title="Ver Productos">
-                              📄
-                            </button>
-                            <button className="btn btn-outline-danger" title="Cancelar Venta">
-                              ❌
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <SalesTable
+            sales={salesList}
+            currentPage={currentPageSale}
+            itemsPerPage={itemsPerPage}
+            onPageChange={(page) => this.setState({ currentPageSale: page })}
+          />
         </div>
 
         {/* --- FORMULARIOS DE OPERACIONES --- */}
         <h4 className="fw-bold mt-5 mb-3">Operaciones Rápidas</h4>
         <div className="row g-3">
 
-          {/* Formulario Registrar Producto */}
-          <div className="col-md-6">
-            <div className="card shadow-sm border-0">
-              <div className="card-header bg-white fw-bold">📦 Nuevo Producto</div>
-              <div className="card-body">
-                <form onSubmit={this.submitProduct}>
-                  <div className="mb-3">
-                    <label className="form-label">Nombre</label>
-                    <input
-                      type="text" name="nombre" className="form-control" required
-                      value={newProduct.nombre} onChange={this.handleProductChange}
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Descripción</label>
-                    <input
-                      type="text" name="descripcion" className="form-control"
-                      value={newProduct.descripcion} onChange={this.handleProductChange}
-                    />
-                  </div>
-                  <div className="row">
-                    <div className="col-6 mb-3">
-                      <label className="form-label">Precio ($)</label>
-                      <input
-                        type="number" name="precio" className="form-control" step="0.01" required
-                        value={newProduct.precio} onChange={this.handleProductChange}
-                      />
-                    </div>
-                    <div className="col-6 mb-3">
-                      <label className="form-label">Stock</label>
-                      <input
-                        type="number" name="stock" className="form-control" required
-                        value={newProduct.stock} onChange={this.handleProductChange}
-                      />
-                    </div>
-                  </div>
-                  <button type="submit" className="btn btn-primary w-100">Guardar Producto</button>
-                </form>
-              </div>
+          <ProductForm
+            newProduct={newProduct}
+            categoryList={this.state.categoryList}
+            onChange={this.handleProductChange}
+            onSubmit={this.submitProduct}
+          />
+
+          <SalePanel
+            productList={productList}
+            currentSelection={currentSelection}
+            onSelectionChange={(changes) => this.handleSelectionChange(changes)}
+            addToCart={this.addToCart}
+            cart={cart}
+            removeFromCart={this.removeFromCart}
+            submitMultiProductSale={this.submitMultiProductSale}
+          />
+
+        </div>
+
+        {/* SECCIÓN CATEGORÍAS */}
+        <div className="col-md-12 mt-4">
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-white fw-bold">Gestión de Categorías</div>
+            <div className="card-body d-flex gap-3">
+              <input
+                type="text"
+                className="form-control w-50"
+                placeholder="Nueva categoría..."
+                value={this.state.newCategoryName}
+                onChange={this.handleCategoryInputChange}
+              />
+              <button className="btn btn-success" onClick={this.handleAddCategory}>Agregar</button>
+            </div>
+            <div className="card-body">
+              <ul className="list-group list-group-flush">
+                {this.state.categoryList && this.state.categoryList.map(c => (
+                  <li key={c.id} className="list-group-item d-flex justify-content-between">
+                    {c.nombre}
+                    <button className="btn btn-sm btn-outline-danger" onClick={() => this.handleDeleteCategory(c.id)}>🗑️</button>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
-
-          {/* Formulario Registrar Venta (Multi-Producto) */}
-          <div className="col-md-6">
-            <div className="card shadow-sm border-0 h-100">
-              <div className="card-header bg-white fw-bold">💳 Registrar Nueva Venta</div>
-              <div className="card-body">
-
-                {/* 1. Selección de producto */}
-                <div className="d-flex gap-2 mb-3">
-                  <select
-                    className="form-select"
-                    value={this.state.currentSelection.productId}
-                    onChange={(e) => this.setState({ currentSelection: { ...this.state.currentSelection, productId: e.target.value } })}
-                  >
-                    <option value="">Seleccionar producto...</option>
-                    {this.state.productList.map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre} - ${p.precio}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    className="form-control"
-                    style={{ width: '80px' }}
-                    min="1"
-                    value={this.state.currentSelection.quantity}
-                    onChange={(e) => this.setState({ currentSelection: { ...this.state.currentSelection, quantity: e.target.value } })}
-                  />
-                  <button type="button" className="btn btn-primary" onClick={this.addToCart}>+</button>
-                </div>
-
-                {/* 2. Lista de "Carrito" (Tabla pequeña) */}
-                <div className="bg-light p-2 rounded mb-3" style={{ minHeight: '100px', maxHeight: '150px', overflowY: 'auto' }}>
-                  {this.state.cart.length === 0 ? (
-                    <p className="text-center text-muted small mt-4">No hay productos agregados</p>
-                  ) : (
-                    <table className="table table-sm table-borderless small mb-0">
-                      <tbody>
-                        {this.state.cart.map((item, idx) => (
-                          <tr key={idx}>
-                            <td>{item.cantidad}x {item.nombre}</td>
-                            <td className="text-end">${item.subtotal.toFixed(2)}</td>
-                            <td className="text-end">
-                              <button className="btn btn-link text-danger p-0 text-decoration-none" onClick={() => this.removeFromCart(idx)}>×</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                {/* 3. Total y Botón Final */}
-                <div className="d-flex justify-content-between align-items-center border-top pt-3">
-                  <h5 className="mb-0 fw-bold">Total: ${this.state.cart.reduce((a, b) => a + b.subtotal, 0).toFixed(2)}</h5>
-                  <button
-                    type="button"
-                    className="btn btn-success fw-bold"
-                    onClick={this.submitMultiProductSale}
-                    disabled={this.state.cart.length === 0}
-                  >
-                    Cobrar
-                  </button>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
     );
@@ -589,22 +544,6 @@ class Administrator extends React.Component {
 }
 
 
-// Componente visual pequeño (stateless)
-const MetricCard = ({ title, value, change, icon, color }) => (
-  <div className="col-md-4">
-    <div className="card shadow-sm border-0 h-100">
-      <div className="card-body">
-        <div className="d-flex justify-content-between mb-3">
-          <div className={`text-${color} bg-${color} bg-opacity-10 p-2 rounded`}>{icon}</div>
-          <span className={`badge bg-${color} bg-opacity-10 text-${color}`}>
-            {change}
-          </span>
-        </div>
-        <h6 className="text-muted fw-normal">{title}</h6>
-        <h3 className="fw-bold mb-0">{value}</h3>
-      </div>
-    </div>
-  </div>
-);
+
 
 export default Administrator;
