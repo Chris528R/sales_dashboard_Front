@@ -31,7 +31,7 @@ class Login extends React.Component {
     formData.append('nombre', user);
     formData.append('cont', password);
 
-    fetch('http://localhost:8080/dist/api/login', { 
+    fetch('http://localhost:8080/api/login', { 
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded', 
@@ -42,12 +42,12 @@ class Login extends React.Component {
     .then(data => {
       if (data.status === 'success') {
         this.setState({
-          alert: { show: true, message: 'Inicio de sesión exitoso', type: 'success' },
+          alert: { show: true, message: 'Inicio de sesion exitoso', type: 'success' },
         });
         
       } else {
         this.setState({
-          alert: { show: true, message: 'Credenciales inválidas', type: 'danger' },
+          alert: { show: true, message: 'Credenciales invalidas', type: 'danger' },
           credentials: { user: '', password: '' }
         });
       }
@@ -55,7 +55,7 @@ class Login extends React.Component {
     .catch((error) => {
       console.error('Error:', error);
       this.setState({
-        alert: { show: true, message: 'Error en la conexión', type: 'danger' },
+        alert: { show: true, message: 'Error en la conexion', type: 'danger' },
       });
     });
   }

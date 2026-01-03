@@ -5,8 +5,7 @@ class Alert extends React.Component {
   render() {
     const { show, onClose, type, message } = this.props;
     const isSuccess = type === 'success';
-    const title = isSuccess ? '¡Éxito!' : 'Error';
-    const icon = isSuccess ? '✅' : '❌'; 
+    const title = isSuccess ? 'Exito!' : 'Error';
     const buttonVariant = isSuccess ? 'success' : 'danger';
     const headerBg = isSuccess ? 'bg-success' : 'bg-danger';
 
@@ -21,7 +20,7 @@ class Alert extends React.Component {
         {/* Cabecera del Modal con color según el tipo */}
         <Modal.Header className={`${headerBg} text-white justify-content-center`}>
           <Modal.Title className="fw-bold">
-            <span className="me-2 fs-4">{icon}</span> {title}
+            {title}
           </Modal.Title>
         </Modal.Header>
 
