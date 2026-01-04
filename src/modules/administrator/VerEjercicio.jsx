@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import SimulationConfigurator from '../common/SimulationConfigurator';
+import SharedModal from '../common/SharedModal';
 import { useParams, Link } from 'react-router-dom';
 import { FlexChart, FlexChartSeries, FlexPie, FlexChartAxis } from '@mescius/wijmo.react.chart';
 import '@mescius/wijmo.styles/wijmo.css';
@@ -40,52 +41,63 @@ class VerEjercicio extends Component {
             simSales: [],
             simCart: [], // Carrito de la simulación
             simSelection: { productId: '', quantity: 1 },
-            simNewProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'Pieza' }
+            simNewProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'Pieza' },
+
+            // --- ESTADO ESPECÍFICO: MODAL ---
+            currentPageSimProd: 1,
+            currentPageSimSale: 1,
+            itemsPerPage: 5,
+            showModal: false,
+            modalMode: 'VIEW',
+            modalEntity: 'PRODUCT',
+            selectedItem: {},
+            saleDetails: [],
+            categoryList: [
+                { id: 1, nombre: 'Bebidas' }, { id: 2, nombre: 'Tecnología' },
+                { id: 3, nombre: 'Limpieza' }, { id: 4, nombre: 'Botanas' }
+            ]
         };
         this.interval = null;
     }
 
     componentDidMount() {
-    const id = this.props.match.params.id;
-    fetch(`http://localhost:8080/api/ejercicios?id=${id}`)
-        .then(res => res.json())
-        .then(data => {
-            const content = typeof data.contenido === 'string' ? JSON.parse(data.contenido) : data.contenido;
-        
-            if (content.tipo === 'analisis_grafico' && Array.isArray(content.datosGrafica)) {
-                content.datosGrafica = content.datosGrafica.map(d => ({
-                    nombre: d.nombre,
-                    valor: parseFloat(d.valor) || 0  
-                }));
-            }
+        const id = this.props.match.params.id;
+        fetch(`http://localhost:8080/api/ejercicios?id=${id}`)
+            .then(res => res.json())
+            .then(data => {
+                const content = typeof data.contenido === 'string' ? JSON.parse(data.contenido) : data.contenido;
 
-            console.log("Contenido procesado:", content);
-            console.log("Datos gráfica:", content.datosGrafica);
+                if (content.tipo === 'analisis_grafico' && Array.isArray(content.datosGrafica)) {
+                    content.datosGrafica = content.datosGrafica.map(d => ({
+                        nombre: d.nombre,
+                        valor: parseFloat(d.valor) || 0
+                    }));
+                }
 
-            let initialState = {
-                loading: false,
-                titulo: data.titulo,
-                nivel: data.nivel,
-                tipo: content.tipo,
-                instruccion: content.pregunta,
-                contenido: content,
-                timerOn: true 
-            };
+                let initialState = {
+                    loading: false,
+                    titulo: data.titulo,
+                    nivel: data.nivel,
+                    tipo: content.tipo,
+                    instruccion: content.pregunta,
+                    contenido: content,
+                    timerOn: true
+                };
 
-            if (content.tipo === 'drag_drop') {
-                initialState.dragItems = content.drags.map(d => ({...d, placedIn: null})); 
-            }
-            if (content.tipo === 'simulacion_dashboard') {
-                initialState.simProducts = JSON.parse(JSON.stringify(content.datos_iniciales.productos || []));
-                initialState.simSales = JSON.parse(JSON.stringify(content.datos_iniciales.ventas || []));
-            }
+                if (content.tipo === 'drag_drop') {
+                    initialState.dragItems = content.drags.map(d => ({ ...d, placedIn: null }));
+                }
+                if (content.tipo === 'simulacion_dashboard') {
+                    initialState.simProducts = JSON.parse(JSON.stringify(content.datos_iniciales.productos || []));
+                    initialState.simSales = JSON.parse(JSON.stringify(content.datos_iniciales.ventas || []));
+                }
 
-            this.setState(initialState, () => {
-                this.startTimer();
-            });
-        })
-        .catch(err => console.error(err));
-}
+                this.setState(initialState, () => {
+                    this.startTimer();
+                });
+            })
+            .catch(err => console.error(err));
+    }
 
     resetExercise = () => {
         clearInterval(this.interval);
@@ -282,8 +294,115 @@ class VerEjercicio extends Component {
         }
     };
 
+    // =========================================================
+    // LÓGICA AUXILIAR: MODAL Y PAGINACIÓN
+    // =========================================================
+
+    // ABRIR MODAL
+    openMockModal = (mode, entity, item) => {
+        let details = [];
+        if (entity === 'SALE') {
+            details = item.detalles ? [...item.detalles] : [];
+        }
+
+        this.setState({
+            showModal: true,
+            modalMode: mode,
+            modalEntity: entity,
+            selectedItem: { ...item },
+            saleDetails: details
+        });
+    };
+
+    closeModal = () => {
+        this.setState({ showModal: false, selectedItem: {}, saleDetails: [] });
+    };
+
+    // MANEJAR CAMBIOS EN EL MODAL
+    handleModalChange = (e) => {
+        const { name, value } = e.target;
+        this.setState(prev => ({
+            selectedItem: { ...prev.selectedItem, [name]: value }
+        }));
+    };
+
+    // GUARDAR CAMBIOS DEL MODAL
+    saveMockChanges = () => {
+        const { modalEntity, selectedItem, saleDetails, simProducts, simSales } = this.state;
+
+        if (modalEntity === 'PRODUCT') {
+            const updatedProducts = simProducts.map(p =>
+                p.id === selectedItem.id ? selectedItem : p
+            );
+            this.setState({ simProducts: updatedProducts, showModal: false });
+
+        } else if (modalEntity === 'SALE') {
+            const originalSale = simSales.find(s => s.id === selectedItem.id);
+            if (!originalSale) return;
+
+            const updatedProducts = simProducts.map(prod => {
+                let currentStock = prod.stock;
+                const originalItem = originalSale.detalles.find(d => d.id === prod.id);
+                if (originalItem) currentStock += parseInt(originalItem.cantidad);
+                const newItem = saleDetails.find(d => d.id === prod.id);
+                if (newItem) currentStock -= parseInt(newItem.cantidad);
+
+                return { ...prod, stock: Math.max(0, currentStock) };
+            });
+
+            const newTotal = saleDetails.reduce((acc, item) => acc + item.subtotal, 0);
+            const updatedSale = { ...selectedItem, total: newTotal, detalles: saleDetails };
+
+            const updatedSales = simSales.map(s => s.id === selectedItem.id ? updatedSale : s);
+
+            this.setState({
+                simSales: updatedSales,
+                simProducts: updatedProducts,
+                showModal: false
+            });
+        }
+    };
+
+    handleMockDetailChange = (idx, val) => {
+        const qty = parseInt(val);
+        if (qty < 1 || isNaN(qty)) return;
+        this.setState(prev => {
+            const det = [...prev.saleDetails];
+            det[idx].cantidad = qty;
+            det[idx].subtotal = qty * det[idx].precio;
+            return { saleDetails: det };
+        });
+    };
+
+    handleMockDetailRemove = (idx) => {
+        this.setState(prev => {
+            const det = [...prev.saleDetails];
+            det.splice(idx, 1);
+            return { saleDetails: det };
+        });
+    };
+
+    handleMockDetailAdd = (id) => {
+        const { simProducts, saleDetails } = this.state;
+        const p = simProducts.find(x => x.id == id);
+        if (!p) return;
+        const det = [...saleDetails];
+        const exist = det.findIndex(x => x.id == id);
+        if (exist >= 0) {
+            det[exist].cantidad++;
+            det[exist].subtotal = det[exist].cantidad * p.precio;
+        } else {
+            det.push({ id: p.id, nombre: p.nombre, precio: p.precio, cantidad: 1, subtotal: p.precio });
+        }
+        this.setState({ saleDetails: det });
+    };
+
     render() {
-        const { loading, titulo, nivel, instruccion, tiempo, resultado, mensajeFeedback, tipo, contenido } = this.state;
+        const { 
+            loading, titulo, nivel, instruccion, tiempo, resultado, mensajeFeedback, tipo, contenido,
+            simNewProduct, categoryList, simProducts, simSales, simSelection, simCart,
+            currentPageSimProd, currentPageSimSale, itemsPerPage
+        } = this.state;
 
         if (loading) return <div className="container mt-5 text-center"><h3>Cargando ejercicio...</h3></div>;
 
@@ -303,6 +422,21 @@ class VerEjercicio extends Component {
                     </div>
                 </div>
 
+                <SharedModal 
+                   show={this.state.showModal}
+                   onClose={this.closeModal}
+                   mode={this.state.modalMode}
+                   entity={this.state.modalEntity}
+                   data={this.state.selectedItem}
+                   saleDetails={this.state.saleDetails}
+                   productList={simProducts} 
+                   onChange={this.handleModalChange}
+                   onSave={this.saveMockChanges}
+                   onDetailChange={this.handleMockDetailChange}
+                   onDetailRemove={this.handleMockDetailRemove}
+                   onDetailAdd={this.handleMockDetailAdd}
+                />
+
                 {/* INSTRUCCIÓN */}
                 <div className="alert alert-info shadow-sm border-0">
                     <strong> Instrucción: </strong> {instruccion}
@@ -316,12 +450,12 @@ class VerEjercicio extends Component {
                             <div className="row">
                                 <div className="col-md-8">
                                     <div style={{ height: '400px' }}>
-                                        {contenido.tipoGrafica === 'pastel' ? 
-                                            <FlexPie itemsSource={contenido.datosGrafica} binding="valor" bindingName="nombre" innerRadius={0.5} /> 
+                                        {contenido.tipoGrafica === 'pastel' ?
+                                            <FlexPie itemsSource={contenido.datosGrafica} binding="valor" bindingName="nombre" innerRadius={0.5} />
                                             :
-                                            <FlexChart 
-                                                itemsSource={contenido.datosGrafica} 
-                                                bindingX="nombre" 
+                                            <FlexChart
+                                                itemsSource={contenido.datosGrafica}
+                                                bindingX="nombre"
                                                 rotated={contenido.tipoGrafica === 'barras'}
                                                 chartType={contenido.tipoGrafica === 'barras' ? 'Bar' : 'Line'}
                                                 palette={['#0d6efd', '#6610f2']}
@@ -378,7 +512,7 @@ class VerEjercicio extends Component {
                                                     <div className="card-header text-center small fw-bold bg-light">{target.valor}</div>
                                                     <div className="card-body p-1 d-flex flex-wrap gap-1 justify-content-center align-content-start">
                                                         {this.state.dragItems.filter(it => it.placedIn === target.valor).map(it => (
-                                                            <span key={it.id} className="badge bg-primary pointer" onClick={(e) => { e.stopPropagation();  }}>
+                                                            <span key={it.id} className="badge bg-primary pointer" onClick={(e) => { e.stopPropagation(); }}>
                                                                 {it.valor}
                                                             </span>
                                                         ))}
@@ -399,34 +533,40 @@ class VerEjercicio extends Component {
                             <div>
                                 <div className="row g-3">
                                     <SimulationConfigurator
-                                        newProduct={this.state.simNewProduct}
-                                        categoryList={[]}
+                                        // PRODUCT FORM
+                                        newProduct={simNewProduct}
+                                        categoryList={categoryList}
                                         onProductChange={(e) => this.setState(p => ({ simNewProduct: { ...p.simNewProduct, [e.target.name]: e.target.value } }))}
                                         onProductSubmit={this.simSubmitProduct}
 
-                                        products={this.state.simProducts}
-                                        currentPageProd={1}
-                                        itemsPerPageProd={5}
-                                        onPageChangeProd={() => {}}
+                                        // PRODUCT TABLE
+                                        products={simProducts}
+                                        currentPageProd={currentPageSimProd} 
+                                        itemsPerPageProd={itemsPerPage}
+                                        onPageChangeProd={(page) => this.setState({ currentPageSimProd: page })}
                                         onDeleteProduct={(id) => this.setState(p => ({ simProducts: p.simProducts.filter(x => x.id !== id) }))}
-                                        onViewProduct={() => { }}
-                                        onEditProduct={() => { }}
+                                        
+                                        onViewProduct={(mode, entity, item) => this.openMockModal(mode, entity, item)}
+                                        onEditProduct={(mode, entity, item) => this.openMockModal(mode, entity, item)}
 
-                                        productList={this.state.simProducts}
-                                        currentSelection={this.state.simSelection}
+                                        // SALE PANEL
+                                        productList={simProducts}
+                                        currentSelection={simSelection}
                                         onSelectionChange={(c) => this.setState(p => ({ simSelection: { ...p.simSelection, ...c } }))}
                                         addToCart={this.simAddToCart}
-                                        cart={this.state.simCart}
-                                        removeFromCart={(idx) => { const c = [...this.state.simCart]; c.splice(idx, 1); this.setState({ simCart: c }) }}
+                                        cart={simCart}
+                                        removeFromCart={(idx) => { const c = [...simCart]; c.splice(idx, 1); this.setState({ simCart: c }) }}
                                         submitMultiProductSale={this.simSubmitSale}
 
-                                        sales={this.state.simSales}
-                                        currentPageSale={1}
-                                        itemsPerPageSale={5}
-                                        onPageChangeSale={() => {}}
-                                        onCancelSale={() => { }}
-                                        onViewSale={() => { }}
-                                        onEditSale={() => { }}
+                                        // SALES TABLE 
+                                        sales={simSales}
+                                        currentPageSale={currentPageSimSale} 
+                                        itemsPerPageSale={itemsPerPage}
+                                        onPageChangeSale={(page) => this.setState({ currentPageSimSale: page })} 
+                                        onCancelSale={(id) => this.setState(p => ({ simSales: p.simSales.filter(s => s.id !== id) }))}
+                                        
+                                        onViewSale={(mode, entity, item) => this.openMockModal(mode, entity, item)}
+                                        onEditSale={(mode, entity, item) => this.openMockModal(mode, entity, item)}
                                     />
                                 </div>
                                 <div className="text-center mt-4 border-top pt-3">

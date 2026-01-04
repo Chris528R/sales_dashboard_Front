@@ -3,10 +3,6 @@ import GraphEditor from '../common/GraphEditor';
 import DragDropEditor from '../common/DragDropEditor';
 import SimulationConfigurator from '../common/SimulationConfigurator';
 import { Navigate, useParams, Link } from 'react-router-dom';
-import ProductForm from '../common/ProductForm';
-import ProductTable from '../common/ProductTable';
-import SalePanel from '../common/SalePanel';
-import SalesTable from '../common/SalesTable';
 import SharedModal from '../common/SharedModal';
 
 export function withRouter(Children){
