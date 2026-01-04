@@ -3,10 +3,6 @@ import SimulationConfigurator from '../common/SimulationConfigurator';
 import { useParams, Link } from 'react-router-dom';
 import { FlexChart, FlexChartSeries, FlexPie, FlexChartAxis } from '@mescius/wijmo.react.chart';
 import '@mescius/wijmo.styles/wijmo.css';
-import ProductForm from '../common/ProductForm';
-import ProductTable from '../common/ProductTable';
-import SalePanel from '../common/SalePanel';
-import SalesTable from '../common/SalesTable';
 
 export function withRouter(Children) {
     return (props) => {
@@ -50,24 +46,46 @@ class VerEjercicio extends Component {
     }
 
     componentDidMount() {
-        const id = this.props.match.params.id;
-        fetch(`http://localhost:8080/api/ejercicios?id=${id}`)
-            .then(res => res.json())
-            .then(data => {
-                const content = typeof data.contenido === 'string' ? JSON.parse(data.contenido) : data.contenido;
+    const id = this.props.match.params.id;
+    fetch(`http://localhost:8080/api/ejercicios?id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+            const content = typeof data.contenido === 'string' ? JSON.parse(data.contenido) : data.contenido;
+        
+            if (content.tipo === 'analisis_grafico' && Array.isArray(content.datosGrafica)) {
+                content.datosGrafica = content.datosGrafica.map(d => ({
+                    nombre: d.nombre,
+                    valor: parseFloat(d.valor) || 0  
+                }));
+            }
 
-                this.setState({
-                    loading: false,
-                    titulo: data.titulo,
-                    nivel: data.nivel,
-                    tipo: content.tipo,
-                    instruccion: content.pregunta,
-                    contenido: content
-                }, () => {
-                    this.resetExercise();
-                });
+            console.log("Contenido procesado:", content);
+            console.log("Datos gráfica:", content.datosGrafica);
+
+            let initialState = {
+                loading: false,
+                titulo: data.titulo,
+                nivel: data.nivel,
+                tipo: content.tipo,
+                instruccion: content.pregunta,
+                contenido: content,
+                timerOn: true 
+            };
+
+            if (content.tipo === 'drag_drop') {
+                initialState.dragItems = content.drags.map(d => ({...d, placedIn: null})); 
+            }
+            if (content.tipo === 'simulacion_dashboard') {
+                initialState.simProducts = JSON.parse(JSON.stringify(content.datos_iniciales.productos || []));
+                initialState.simSales = JSON.parse(JSON.stringify(content.datos_iniciales.ventas || []));
+            }
+
+            this.setState(initialState, () => {
+                this.startTimer();
             });
-    }
+        })
+        .catch(err => console.error(err));
+}
 
     resetExercise = () => {
         clearInterval(this.interval);
@@ -134,9 +152,19 @@ class VerEjercicio extends Component {
     // =========================================================
     verificarGrafico = () => {
         const { contenido, opcionSeleccionada } = this.state;
-        if (!opcionSeleccionada) return;
+        if (!opcionSeleccionada) {
+            alert("Por favor selecciona una opción.");
+            return;
+        }
 
         const correcta = contenido.opciones.find(op => op.esCorrecta);
+
+        if (!correcta) {
+            console.error("Error en datos: Ninguna opción tiene esCorrecta=true");
+            this.finishExercise(false, "Error en el ejercicio: No hay respuesta configurada.");
+            return;
+        }
+
         if (opcionSeleccionada === correcta.texto) {
             this.finishExercise(true, "Excelente analisis!");
         } else {
@@ -287,11 +315,20 @@ class VerEjercicio extends Component {
                         {tipo === 'analisis_grafico' && (
                             <div className="row">
                                 <div className="col-md-8">
-                                    <div style={{ height: '350px' }}>
-                                        {contenido.tipoGrafica === 'pastel' ?
-                                            <FlexPie itemsSource={contenido.datosGrafica} binding="valor" bindingName="nombre" innerRadius={0.5} /> :
-                                            <FlexChart itemsSource={contenido.datosGrafica} bindingX="nombre" rotated={contenido.tipoGrafica === 'barras'} chartType={contenido.tipoGrafica === 'barras' ? 'Bar' : 'Line'}>
+                                    <div style={{ height: '400px' }}>
+                                        {contenido.tipoGrafica === 'pastel' ? 
+                                            <FlexPie itemsSource={contenido.datosGrafica} binding="valor" bindingName="nombre" innerRadius={0.5} /> 
+                                            :
+                                            <FlexChart 
+                                                itemsSource={contenido.datosGrafica} 
+                                                bindingX="nombre" 
+                                                rotated={contenido.tipoGrafica === 'barras'}
+                                                chartType={contenido.tipoGrafica === 'barras' ? 'Bar' : 'Line'}
+                                                palette={['#0d6efd', '#6610f2']}
+                                            >
                                                 <FlexChartSeries binding="valor" name="Valor" />
+                                                <FlexChartAxis wjProperty="axisX" title="Elemento" />
+                                                <FlexChartAxis wjProperty="axisY" title="Valor" />
                                             </FlexChart>
                                         }
                                     </div>
@@ -361,7 +398,6 @@ class VerEjercicio extends Component {
                         {tipo === 'simulacion_dashboard' && (
                             <div>
                                 <div className="row g-3">
-                                    {/* Aquí reutilizamos tus componentes pero pasándole el estado local 'sim...' */}
                                     <SimulationConfigurator
                                         newProduct={this.state.simNewProduct}
                                         categoryList={[]}
