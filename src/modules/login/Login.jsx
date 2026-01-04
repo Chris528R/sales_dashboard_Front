@@ -36,11 +36,12 @@ class Login extends React.Component {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded', 
       },
-      body: formData // Enviamos formData en lugar de JSON string
+      body: formData 
     })
     .then(response => response.json())
     .then(data => {
       if (data.status === 'success') {
+        localStorage.setItem('user_session', JSON.stringify({ role: 'admin', loggedIn: true }));
         this.setState({
           alert: { show: true, message: 'Inicio de sesion exitoso', type: 'success' },
         });
@@ -72,8 +73,8 @@ class Login extends React.Component {
 
 
   render() {
-
-    if (this.state.redirect) {
+    const userSession = localStorage.getItem('user_session');
+    if (this.state.redirect || userSession) {
       return <Navigate to="/administrator" />;
     }
 

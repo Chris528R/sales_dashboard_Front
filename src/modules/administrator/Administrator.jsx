@@ -1,542 +1,96 @@
 import React, { Component } from 'react';
-import '@mescius/wijmo.styles/wijmo.css';
+import { Link, Navigate } from 'react-router-dom';
+import Alert from '../common/Alert.jsx';
 
-// Componentes de Wijmo
-import { FlexChart, FlexChartSeries, FlexChartAxis, FlexPie } from '@mescius/wijmo.react.chart';
-import Alert from '../common/Alert';
-import MetricCard from '../common/MetricCard';
-import ProductTable from '../common/ProductTable';
-import SalesTable from '../common/SalesTable';
-import ProductForm from '../common/ProductForm';
-import SalePanel from '../common/SalePanel';
-import SharedModal from '../common/SharedModal';
-
-class Administrator extends React.Component {
+class Administrator extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      // DATOS DEL DASHBOARD
-      dashboardData: {
-        ventasHoy: 0,
-        productosBajoStock: 0,
-        ventasPorCategoria: [],
-        topProductos: []
+      exerciseList: [],
+
+      alert: {
+        show: false,
+        type: '',
+        message: ''
       },
-      //  DATOS AUXILIARES 
-      productList: [], // Para llenar el select de ventas
-      salesList: [], // Historial de ventas para la tabla
-      mockMonthlyData: [], // Datos para el gráfico de líneas
-
-      //  FORMULARIOS 
-      newProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'pieza' },
-      newSale: { productId: '', quantity: 1 },
-
-      // ALERTAS 
-      alert: { show: false, type: '', message: '' },
-
-      // ESTADO PARA VENTA MULTI-PRODUCTO
-      cart: [], // Aquí guardaremos los productos antes de vender
-      currentSelection: { productId: '', quantity: 1 }, // Selección temporal
-
-      // ESTADO PARA TABLAS
-      showModal: false,
-      modalMode: 'VIEW',    // 'VIEW' o 'EDIT'
-      modalEntity: 'PRODUCT', // 'PRODUCT' o 'SALE'
-      selectedItem: {},
-      saleDetails: [],
-
-
-
-      // Paginación en las tablas 
-      currentPageProd: 1,
-      currentPageSale: 1,
-      itemsPerPage: 5,
-
-      // Lista de categorías 
-      categoryList: [],
-      newCategoryName: ''
+      logout: false
     };
   }
-
-  handleSelectionChange = (changes) => {
-    this.setState(prev => ({ currentSelection: { ...prev.currentSelection, ...changes } }));
-  };
 
   componentDidMount() {
-    this.loadDashboardData();
-    this.loadProducts();
-    this.loadSalesHistory();
-    this.loadMonthlyHistory();
-    this.loadCategories();
+    this.loadExercises();
   }
 
-  loadCategories = () => {
-    fetch('http://localhost:8080/api/categorias')
+  loadExercises = () => {
+    fetch('http://localhost:8080/api/ejercicios')
       .then(res => res.json())
       .then(data => {
-        this.setState({ categoryList: data });
+        this.setState({ exerciseList: data });
       })
-      .catch(err => console.error("Error cargando categorías:", err));
-  };
-
-  loadMonthlyHistory = () => {
-    fetch('http://localhost:8080/api/ventas/historial')
-      .then(res => res.json())
-      .then(data => {
-        const formattedData = data.map(item => ({
-          month: item.mes,
-          sales: item.total
-        }));
-        this.setState({ mockMonthlyData: formattedData });
-      });
-  }
-
-  loadSalesHistory = () => {
-    fetch('http://localhost:8080/api/ventas')
-      .then(res => res.json())
-      .then(data => {
-        this.setState({ salesList: data });
-      })
-      .catch(err => console.error("Error cargando historial ventas:", err));
-  };
-
-  // CARGA DE DATOS DEL DASHBOARD
-  loadDashboardData = () => {
-    fetch('http://localhost:8080/api/dashboard')
-      .then(res => res.json())
-      .then(data => {
-        this.setState({ dashboardData: data });
-      })
-      .catch(err => console.error("Error cargando dashboard:", err));
-  };
-
-  loadProducts = () => {
-    fetch('http://localhost:8080/api/productos')
-      .then(res => res.json())
-      .then(data => {
-        this.setState({ productList: data });
-      })
-      .catch(err => console.error("Error cargando productos:", err));
-  };
-
-  handleDeleteProduct = (id) => {
-    if (!window.confirm("¿Seguro que quieres eliminar este producto?")) return;
-
-    fetch(`http://localhost:8080/api/productos?id=${id}`, {
-      method: 'DELETE'
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Producto eliminado');
-          this.loadProducts(); // Recargar tabla
-          this.loadDashboardData(); // Actualizar contadores
-        } else {
-          this.showAlert('error', 'No se pudo eliminar');
-        }
-      })
-      .catch(err => this.showAlert('error', 'Error de conexion'));
-  };
-
-  handleDeleteSale = (id) => {
-    if (!window.confirm("¿Seguro que quieres eliminar esta venta?")) return;
-
-    fetch(`http://localhost:8080/api/ventas?id=${id}`, {
-      method: 'DELETE'
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Venta eliminada');
-          this.loadProducts(); // Recargar tabla
-          this.loadSalesHistory(); // Recargar historial
-          this.loadDashboardData(); // Actualizar contadores
-        } else {
-          this.showAlert('error', 'No se pudo eliminar');
-        }
-      })
-      .catch(err => this.showAlert('error', 'Error de conexion'));
-  };
-
-  handleAddCategory = (e) => {
-    e.preventDefault();
-    const { newCategoryName } = this.state;
-
-    const formData = new URLSearchParams();
-    formData.append('nombre', newCategoryName);
-
-    fetch('http://localhost:8080/api/categorias', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Categoria agregada correctamente');
-          this.loadCategories(); // Recargar lista de categorías
-          this.setState({ newCategoryName: '' });
-        } else {
-          this.showAlert('error', 'Error al agregar la categoria');
-        }
+      .catch(err => {
+        console.error("Error cargando ejercicios:", err);
+        this.showAlert('error', 'Error al conectar con el servidor.');
       });
   };
 
-  handleDeleteCategory = (id) => {
-    if (!window.confirm("¿Seguro que quieres eliminar esta categoría?")) return;
+  handleDelete = (id) => {
+    if (window.confirm(`¿Estás seguro de eliminar el ejercicio #${id}?`)) {
 
-    fetch(`http://localhost:8080/api/categorias?id=${id}`, {
-      method: 'DELETE'
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Categoria eliminada');
-          this.loadCategories(); // Recargar lista
-        } else {
-          this.showAlert('error', 'No se pudo eliminar la categoria');
-        }
+      fetch(`http://localhost:8080/api/ejercicios?id=${id}`, {
+        method: 'DELETE'
       })
-      .catch(err => this.showAlert('error', 'Error de conexion'));
-  };
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            const filtered = this.state.exerciseList.filter(ex => ex.id !== id);
 
-  //  MANEJO DE INPUTS 
-  handleProductChange = (e) => {
-    const { name, value } = e.target;
-    this.setState(prev => ({
-      newProduct: { ...prev.newProduct, [name]: value }
-    }));
-  };
-
-  handleSaleChange = (e) => {
-    const { name, value } = e.target;
-    this.setState(prev => ({
-      newSale: { ...prev.newSale, [name]: value }
-    }));
-  };
-
-  handleCategoryInputChange = (e) => {
-    this.setState({ newCategoryName: e.target.value });
-  };
-
-  removeFromCart = (index) => {
-    this.setState(prevState => {
-      const newCart = [...prevState.cart];
-      newCart.splice(index, 1);
-      return { cart: newCart };
-    });
-  };
-
-  submitMultiProductSale = () => {
-    const { cart } = this.state;
-    if (cart.length === 0) return;
-
-    // Calculamos totales y preparamos los strings separados por comas
-    const totalVenta = cart.reduce((acc, item) => acc + item.subtotal, 0);
-    const ids = cart.map(item => item.id).join(',');
-    const cants = cart.map(item => item.cantidad).join(',');
-    const precios = cart.map(item => item.precio).join(',');
-
-    const formData = new URLSearchParams();
-    formData.append('total', totalVenta);
-    formData.append('ids_productos', ids);
-    formData.append('cantidades', cants);
-    formData.append('precios_unitarios', precios);
-
-    fetch('http://localhost:8080/api/ventas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Venta registrada con exito');
-          this.setState({ cart: [] }); // Limpiar carrito
-          this.loadDashboardData(); // Recargar gráficas
-          this.loadProducts(); // Recargar lista para ventas
-          this.loadSalesHistory(); // Recargar historial de ventas
-        } else {
-          this.showAlert('error', 'No se pudo registrar la venta');
-        }
-      });
-  };
-
-  // REGISTRAR PRODUCTO
-  submitProduct = (e) => {
-    e.preventDefault();
-    const { nombre, descripcion, precio, stock, categoria, unidad } = this.state.newProduct;
-
-    const formData = new URLSearchParams();
-    formData.append('nombre', nombre);
-    formData.append('descripcion', descripcion);
-    formData.append('tipo', 'general');
-    formData.append('precio', precio);
-    formData.append('stock', stock);
-    formData.append('categoria', categoria);
-    formData.append('unidad', unidad);
-
-    fetch('http://localhost:8080/api/productos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', 'Producto registrado correctamente');
-          this.loadDashboardData(); // Recargar gráficas
-          this.loadProducts(); // Recargar lista para ventas
-          this.setState({ newProduct: { nombre: '', descripcion: '', precio: '', stock: '', categoria: 1, unidad: 'pieza' } });
-        } else {
-          this.showAlert('error', 'Error al registrar el producto');
-        }
-      })
-      .catch(err => this.showAlert('error', 'Error de conexion'));
-  };
-
-  // REGISTRAR VENTA
-  submitSale = (e) => {
-    e.preventDefault();
-    const { productId, quantity } = this.state.newSale;
-
-    // Buscar el producto seleccionado para obtener su precio actual
-    const selectedProd = this.state.productList.find(p => p.id == productId);
-
-    if (!selectedProd) {
-      this.showAlert('error', 'Selecciona un producto valido');
-      return;
+            this.setState({
+              exerciseList: filtered
+            });
+            this.showAlert('success', 'Ejercicio eliminado correctamente.');
+          } else {
+            this.showAlert('error', 'No se pudo eliminar el ejercicio.');
+          }
+        })
+        .catch(err => {
+          this.showAlert('error', 'Error de conexión al intentar eliminar.');
+        });
     }
-
-    const precioUnitario = selectedProd.precio;
-    const total = precioUnitario * quantity;
-
-    const formData = new URLSearchParams();
-    formData.append('total', total);
-    formData.append('ids_productos', productId.toString()); // "1"
-    formData.append('cantidades', quantity.toString());     // "2"
-    formData.append('precios_unitarios', precioUnitario.toString()); // "15.50"
-
-    fetch('http://localhost:8080/api/ventas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          this.showAlert('success', `Venta registrada por $${total}`);
-          this.loadDashboardData(); // Recargar métricas (Ventas hoy)
-          this.loadProducts(); // Recargar lista para ventas
-          this.loadSalesHistory(); // Recargar historial de ventas
-          this.setState({ newSale: { productId: '', quantity: 1 } });
-        } else {
-          this.showAlert('error', 'Error al registrar la venta');
-        }
-      })
-      .catch(err => this.showAlert('error', 'Error de conexion'));
   };
 
-  addToCart = () => {
-    const { productId, quantity } = this.state.currentSelection;
-    const product = this.state.productList.find(p => p.id == productId);
-
-    if (!product || quantity < 1) return;
-
-    const newItem = {
-      id: product.id,
-      nombre: product.nombre,
-      precio: product.precio,
-      cantidad: parseInt(quantity),
-      subtotal: product.precio * quantity
-    };
-
-    this.setState(prevState => ({
-      cart: [...prevState.cart, newItem],
-      currentSelection: { productId: '', quantity: 1 } // Reset selección
-    }));
+  handleLogout = () => {
+    localStorage.removeItem('user_session');
+    
+    this.setState({ logout: true });
   };
 
-  // --- UTILIDADES ---
   showAlert = (type, message) => {
-    this.setState({ alert: { show: true, type, message } });
+    this.setState({
+      alert: { show: true, type, message }
+    });
   };
 
   closeAlert = () => {
-    this.setState(prev => ({ alert: { ...prev.alert, show: false } }));
-  };
-
-  openModal = (mode, entity, item) => {
-    this.setState({
-      showModal: true,
-      modalMode: mode,
-      modalEntity: entity,
-      selectedItem: { ...item },
-      saleDetails: []
-    });
-
-    if (entity === 'SALE') {
-      this.fetchSaleDetails(item.id);
-    }
-  };
-
-  closeModal = () => {
-    this.setState({ showModal: false, selectedItem: {} });
-  };
-
-  fetchSaleDetails = (saleId) => {
-    fetch(`http://localhost:8080/api/ventas?id=${saleId}`)
-      .then(res => res.json())
-      .then(data => {
-        this.setState({ saleDetails: data });
-      })
-      .catch(err => console.error("Error cargando detalles de venta:", err));
-  };
-
-  handleModalChange = (e) => {
-    const { name, value } = e.target;
     this.setState(prev => ({
-      selectedItem: { ...prev.selectedItem, [name]: value }
+      alert: { ...prev.alert, show: false }
     }));
   };
 
-  saveModalChanges = () => {
-    const { modalEntity, selectedItem, saleDetails } = this.state;
-
-    if (modalEntity === 'PRODUCT') {
-      const formData = new URLSearchParams();
-      formData.append('nombre', selectedItem.nombre);
-      formData.append('descripcion', selectedItem.descripcion);
-      formData.append('tipo', selectedItem.tipo || 'General');
-      formData.append('precio', selectedItem.precio);
-      formData.append('stock', selectedItem.stock);
-      formData.append('categoria', selectedItem.id_categoria || 1);
-      formData.append('unidad', selectedItem.unidad || 'Pieza');
-
-      let url = 'http://localhost:8080/api/productos';
-      if (this.state.modalMode === 'EDIT') {
-        url += `?id=${selectedItem.id}`;
-      }
-
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            this.showAlert('success', 'Producto actualizado');
-            this.closeModal();
-            this.loadProducts();
-            this.loadDashboardData();
-          } else {
-            this.showAlert('error', 'Error al actualizar');
-          }
-        });
-    } else if (modalEntity === 'SALE') {
-      if (saleDetails.length === 0) {
-        this.showAlert('error', 'La venta no puede quedar vacía.');
-        return;
-      }
-
-      // Recalcular Total General
-      const totalVenta = saleDetails.reduce((acc, item) => acc + (item.cantidad * (item.precio)), 0);
-
-      const ids = saleDetails.map(item => item.id_producto).join(',');
-      const cants = saleDetails.map(item => item.cantidad).join(',');
-      const precios = saleDetails.map(item => (item.precio)).join(',');
-      const formData = new URLSearchParams();
-      formData.append('total', totalVenta);
-      formData.append('ids_productos', ids);
-      formData.append('cantidades', cants);
-      formData.append('precios_unitarios', precios);
-
-      fetch(`http://localhost:8080/api/ventas?id=${selectedItem.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            this.showAlert('success', 'Venta actualizada correctamente');
-            this.closeModal();
-            this.loadSalesHistory(); // Recargar tabla ventas
-            this.loadDashboardData(); // Recargar gráficas
-            this.loadProducts(); // Recargar inventario (porque el stock cambió)
-          } else {
-            this.showAlert('error', 'Error al actualizar la venta');
-          }
-        })
-        .catch(err => this.showAlert('error', 'Error de conexión'));
-    }
+  formatTime = (seconds) => {
+    if (!seconds) return '--:--';
+    return new Date(seconds * 1000).toISOString().substr(14, 5);
   };
-
-  handleSaleDetailChange = (index, newQuantity) => {
-    const qty = parseInt(newQuantity);
-    if (qty < 1 || isNaN(qty)) return;
-
-    this.setState(prevState => {
-      const updatedDetails = [...prevState.saleDetails];
-      const item = updatedDetails[index];
-
-      item.cantidad = qty;
-      const precio = item.precio;
-      item.subtotal = qty * precio;
-
-      return { saleDetails: updatedDetails };
-    });
-  };
-
-  handleSaleDetailRemove = (index) => {
-    if (!window.confirm("¿Quitar este producto de la venta?")) return;
-
-    this.setState(prevState => {
-      const updatedDetails = [...prevState.saleDetails];
-      updatedDetails.splice(index, 1);
-      return { saleDetails: updatedDetails };
-    });
-  };
-
-  handleSaleDetailAdd = (productId) => {
-    const product = this.state.productList.find(p => p.id == productId);
-    if (!product) return;
-
-    this.setState(prevState => {
-      const updatedDetails = [...prevState.saleDetails];
-
-      const existingIndex = updatedDetails.findIndex(d => d.id_producto === product.id);
-
-      if (existingIndex >= 0) {
-        updatedDetails[existingIndex].cantidad += 1;
-        updatedDetails[existingIndex].subtotal = updatedDetails[existingIndex].cantidad * product.precio;
-      } else {
-        updatedDetails.push({
-          id_producto: product.id,
-          nombre: product.nombre,
-          cantidad: 1,
-          precio: product.precio,
-          subtotal: product.precio
-        });
-      }
-      return { saleDetails: updatedDetails };
-    });
-  };
-
 
   render() {
-    const {
-      dashboardData, productList, salesList, // Datos
-      newProduct, newSale, alert, cart, currentSelection, mockMonthlyData, // Formularios y UI
-      currentPageProd, currentPageSale, itemsPerPage = 5 // Paginación 
-    } = this.state;
-
+    if (this.state.logout) {
+        return <Navigate to="/" />;
+    }
+    const { exerciseList, alert } = this.state;
 
     return (
-      <div className="container-fluid bg-light min-vh-100 p-4">
+      <div className="container mt-5">
 
-        {/* ALERTA MODAL */}
+
         <Alert
           show={alert.show}
           type={alert.type}
@@ -544,212 +98,102 @@ class Administrator extends React.Component {
           onClose={this.closeAlert}
         />
 
-        {/* COMPONENTE MODAL */}
-        <SharedModal
-          show={this.state.showModal}
-          onClose={this.closeModal}
-          mode={this.state.modalMode}
-          entity={this.state.modalEntity}
-          data={this.state.selectedItem}
-          saleDetails={this.state.saleDetails}
-          productList={this.state.productList}
-          onChange={this.handleModalChange}
-          onSave={this.saveModalChanges}
-          onDetailChange={this.handleSaleDetailChange}
-          onDetailRemove={this.handleSaleDetailRemove}
-          onDetailAdd={this.handleSaleDetailAdd}
-        />
-
-        {/* HEADER */}
-        <div className="d-flex justify-content-between align-items-center mb-4">
+        <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
           <div>
-            <h2 className="fw-bold">Panel de Control</h2>
-            <p className="text-muted">Resumen de ventas e inventario</p>
+            <h1 className="h3 text-primary fw-bold">Panel de Administrador</h1>
+          </div>
+          
+          <div className="d-flex gap-2">
+             <button 
+                className="btn btn-outline-danger" 
+                onClick={this.handleLogout}
+             >
+                Cerrar Sesión
+             </button>
+             <Link to="/crear-ejercicio" className="btn btn-success fw-bold shadow-sm">
+                <span className="me-2">＋</span> Nuevo Ejercicio
+             </Link>
           </div>
         </div>
 
-        {/* METRICS CARDS */}
-        <div className="row g-3 mb-4">
-          <MetricCard
-            title="Ventas de Hoy"
-            value={`$${dashboardData.ventasHoy}`}
-            icon="💰"
-            color="success"
-          />
-
-          <MetricCard
-            title="Bajo Stock"
-            value={dashboardData.productosBajoStock}
-            icon="⚠️"
-            color="warning"
-          />
-          <MetricCard
-            title="Total Productos"
-            value={productList.length}
-            icon="📦"
-            color="primary"
-          />
-        </div>
-
-        {/* CHARTS SECTION */}
-        <div className="row g-3 mb-4">
-          <div className="col-lg-8">
-            <div className="card shadow-sm h-100 border-0">
-              <div className="card-body">
-                <h5 className="card-title">Tendencia de Ventas</h5>
-                <p className="text-muted small">Simulación mensual</p>
-                <div style={{ height: '400px' }}>
-                  <FlexChart itemsSource={mockMonthlyData} bindingX="month" chartType="Spline">
-                    <FlexChartSeries binding="sales" name="Ventas" />
-                    <FlexChartAxis wjProperty="axisY" format="c0" />
-                  </FlexChart>
-                </div>
-              </div>
-            </div>
+        {/* --- TABLA DE EJERCICIOS --- */}
+        <div className="card shadow border-0">
+          <div className="card-header bg-white py-3">
+            <h5 className="m-0 font-weight-bold text-secondary">Lista de Ejercicios Disponibles</h5>
           </div>
+          <div className="card-body p-0">
+            <div className="table-responsive">
+              <table className="table table-hover table-striped mb-0 align-middle">
+                <thead className="table-light text-uppercase small">
+                  <tr>
+                    <th scope="col" className="ps-4"># ID</th>
+                    <th scope="col">Título del Ejercicio</th>
+                    <th scope="col">Nivel / Categoría</th>
+                    <th scope="col">Mejor Tiempo</th>
+                    <th scope="col" className="text-end pe-4">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exerciseList.length > 0 ? (
+                    exerciseList.map((exercise) => (
+                      <tr key={exercise.id}>
+                        <td className="ps-4 fw-bold text-muted">{exercise.id}</td>
+                        <td className="fw-bold">{exercise.titulo}</td>
+                        <td>
+                          <span className={`badge ${exercise.nivel === 'Principiante' ? 'bg-info' :
+                            exercise.nivel === 'Intermedio' ? 'bg-warning text-dark' : 'bg-danger'
+                            }`}>
+                            {exercise.nivel}
+                          </span>
+                        </td>
+                        <td className="text-center font-monospace text-success fw-bold">
+                          {exercise.mejorTiempo ? `🏆 ${this.formatTime(exercise.mejorTiempo)}` : <span className="text-muted small">-</span>}
+                        </td>
+                        <td className="text-end pe-4">
+                          <div className="btn-group" role="group">
+                            <Link
+                              to={`/ver-ejercicio/${exercise.id}`}
+                              className="btn btn-outline-primary btn-sm"
+                              title="Ver / Probar"
+                            >
+                              👁️ Ver / Probar
+                            </Link>
 
-          {/* Ventas por Categoria */}
-          <div className="col-lg-4">
-            <div className="card shadow-sm h-100 border-0">
-              <div className="card-body">
-                <h5 className="card-title">Ventas por Categoría</h5>
-                <div style={{ height: '300px' }}>
-                  <FlexPie
-                    itemsSource={dashboardData.ventasPorCategoria}
-                    binding="monto"
-                    bindingName="categoria"
-                    innerRadius={0.5}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                            <Link
+                              to={`/editar-ejercicio/${exercise.id}`}
+                              className="btn btn-outline-secondary btn-sm"
+                              title="Editar"
+                            >
+                              ✏️ Editar
+                            </Link>
 
-        {/* Top Productos */}
-        <div className="row g-3 mb-4">
-          <div className="col-md-12">
-            <div className="card shadow-sm border-0">
-              <div className="card-body">
-                <h5 className="card-title mb-3">Top 5 Productos Vendidos</h5>
-
-                <div style={{ height: '400px' }}>
-                  {dashboardData.topProductos.length > 0 ? (
-                    <FlexChart
-                      itemsSource={dashboardData.topProductos}
-                      bindingX="producto"
-                      rotated={true}
-                      palette={['#0d6efd', '#6610f2', '#6f42c1']}
-                    >
-                      <FlexChartSeries
-                        binding="cantidad"
-                        name="Unidades"
-                        tooltipContent="<b>{seriesName}</b><br/>{item.producto}: {value}"
-                      />
-
-                      {/* Eje Y (Nombres de productos) */}
-                      <FlexChartAxis
-                        wjProperty="axisY"
-                        reversed={true}
-                        style={{ fontSize: '12px', fontWeight: 'bold' }}
-                        majorGrid={false}
-                      />
-
-                      {/* Eje X (Cantidades) */}
-                      <FlexChartAxis
-                        wjProperty="axisX"
-                        format="n0"
-                        title="Cantidad Vendida"
-                      />
-                    </FlexChart>
+                            <button
+                              className="btn btn-outline-danger btn-sm"
+                              title="Eliminar"
+                              onClick={() => this.handleDelete(exercise.id)}
+                            >
+                              🗑️ Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : (
-                    <p className="text-muted text-center mt-5">No hay datos de ventas aún.</p>
+                    <tr>
+                      <td colSpan="4" className="text-center py-5 text-muted">
+                        No hay ejercicios registrados. ¡Crea uno nuevo!
+                      </td>
+                    </tr>
                   )}
-                </div>
-
-              </div>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        {/* SECCIÓN DE TABLAS DE GESTIÓN */}
-        <div className="row g-4 mb-5">
-          <ProductTable
-            products={productList}
-            currentPage={currentPageProd}
-            itemsPerPage={itemsPerPage}
-            onDelete={this.handleDeleteProduct}
-            onPageChange={(page) => this.setState({ currentPageProd: page })}
-            onView={this.openModal}
-            onEdit={this.openModal}
-          />
-
-          <SalesTable
-            sales={salesList}
-            currentPage={currentPageSale}
-            itemsPerPage={itemsPerPage}
-            onPageChange={(page) => this.setState({ currentPageSale: page })}
-            onView={this.openModal}
-            onEdit={this.openModal}
-            onCancel={this.handleDeleteSale}
-          />
-        </div>
-
-        {/* FORMULARIOS DE OPERACIONES */}
-        <h4 className="fw-bold mt-5 mb-3">Operaciones Rápidas</h4>
-        <div className="row g-3">
-
-          <ProductForm
-            newProduct={newProduct}
-            categoryList={this.state.categoryList}
-            onChange={this.handleProductChange}
-            onSubmit={this.submitProduct}
-          />
-
-          <SalePanel
-            productList={productList}
-            currentSelection={currentSelection}
-            onSelectionChange={(changes) => this.handleSelectionChange(changes)}
-            addToCart={this.addToCart}
-            cart={cart}
-            removeFromCart={this.removeFromCart}
-            submitMultiProductSale={this.submitMultiProductSale}
-          />
-
-        </div>
-
-        {/* SECCIÓN CATEGORÍAS */}
-        <div className="col-md-12 mt-4">
-          <div className="card shadow-sm border-0">
-            <div className="card-header bg-white fw-bold">Gestión de Categorías</div>
-            <div className="card-body d-flex gap-3">
-              <input
-                type="text"
-                className="form-control w-50"
-                placeholder="Nueva categoría..."
-                value={this.state.newCategoryName}
-                onChange={this.handleCategoryInputChange}
-              />
-              <button className="btn btn-success" onClick={this.handleAddCategory}>Agregar</button>
-            </div>
-            <div className="card-body">
-              <ul className="list-group list-group-flush">
-                {this.state.categoryList && this.state.categoryList.map(c => (
-                  <li key={c.id} className="list-group-item d-flex justify-content-between">
-                    {c.nombre}
-                    <button className="btn btn-sm btn-outline-danger" onClick={() => this.handleDeleteCategory(c.id)}>🗑️</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
       </div>
     );
   }
 }
-
-
-
 
 export default Administrator;
